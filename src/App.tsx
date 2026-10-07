@@ -94,9 +94,8 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(settings.focus * 60);
   const [isRunning, setIsRunning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [completedPomodoros, setCompletedPomodoros] = useState(0);
   const intervalRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
+  const completedRef = useRef(false); // Flag to avoid double-completion in Strict Mode
 
   const totalTime = settings[mode] * 60;
   const progress = (totalTime - timeLeft) / totalTime;
@@ -106,6 +105,7 @@ function App() {
   const todaySessions = statistics.sessions.filter(s => s.date === todayKey);
   const todayFocusMinutes = todaySessions.reduce((acc, s) => acc + s.duration, 0);
   const todaySessionCount = todaySessions.length;
+  const completedPomodoros = todaySessionCount; // Derived from persisted data
 
   // Timer logic
   const clearTimer = useCallback(() => {
@@ -116,6 +116,10 @@ function App() {
   }, []);
 
   const handleComplete = useCallback(() => {
+    // Guard against double-call in React Strict Mode
+    if (completedRef.current) return;
+    completedRef.current = true;
+
     clearTimer();
     setIsRunning(false);
 
@@ -129,7 +133,6 @@ function App() {
         sessions: [...prev.sessions, session],
         totalFocusMinutes: prev.totalFocusMinutes + settings.focus,
       }));
-      setCompletedPomodoros(prev => prev + 1);
 
       // Play notification sound
       try {
@@ -149,11 +152,12 @@ function App() {
 
   useEffect(() => {
     if (isRunning) {
-      if (!startTimeRef.current) startTimeRef.current = Date.now();
+      completedRef.current = false; // Reset completion flag when starting
       intervalRef.current = window.setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
-            handleComplete();
+            // Use setTimeout to call handleComplete outside of state updater
+            setTimeout(() => handleComplete(), 0);
             return 0;
           }
           return prev - 1;
@@ -186,7 +190,6 @@ function App() {
     setIsRunning(false);
     clearTimer();
     setTimeLeft(settings[mode] * 60);
-    startTimeRef.current = null;
   };
 
   const handleModeChange = (newMode: TimerMode) => {
@@ -194,7 +197,6 @@ function App() {
     clearTimer();
     setMode(newMode);
     setTimeLeft(settings[newMode] * 60);
-    startTimeRef.current = null;
   };
 
   const handleSettingsChange = (key: keyof TimerSettings, value: number) => {
@@ -207,7 +209,6 @@ function App() {
 
   const clearStatistics = () => {
     setStatistics({ sessions: [], totalFocusMinutes: 0 });
-    setCompletedPomodoros(0);
   };
 
   // SVG circle parameters
